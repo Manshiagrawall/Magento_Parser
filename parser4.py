@@ -12,6 +12,14 @@ load_dotenv()
 PAGESPEED_API_KEY = os.getenv("PAGESPEED_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+if not GROQ_API_KEY:
+    st.error("GROQ_API_KEY is not set. Please configure it in your environment.")
+else:
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+    except Exception as e:
+        st.error(f"Failed to initialize Groq client: {e}")
+
 PRIORITY_MAPPING = {
     "FCP": "High",
     "LCP": "Medium",
