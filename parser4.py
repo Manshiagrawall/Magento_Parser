@@ -8,9 +8,24 @@ from dotenv import load_dotenv
 # Load environment variables from a .env file
 load_dotenv()
 
-# Fetch API keys from environment variables
-PAGESPEED_API_KEY = os.getenv("PAGESPEED_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# Fetch API keys from environment variables or Streamlit secrets
+try:
+    # Attempt to load from .env file for local development
+    PAGESPEED_API_KEY = os.getenv("PAGESPEED_API_KEY")
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+except KeyError:
+    # Fallback to Streamlit secrets for deployment
+    PAGESPEED_API_KEY = st.secrets["api_keys"]["PAGESPEED_API_KEY"]
+    GROQ_API_KEY = st.secrets["api_keys"]["GROQ_API_KEY"]
+
+# Check if GROQ_API_KEY is set before initializing Groq client
+if not GROQ_API_KEY:
+    st.error("GROQ_API_KEY is not set. Please configure it in your environment.")
+else:
+    try:
+        client = Groq(api_key=GROQ_API_KEY)
+    except Exception as e:
+        st.error(f"Failed to initialize Groq client: {e}")
 
 PRIORITY_MAPPING = {
     "FCP": "High",
