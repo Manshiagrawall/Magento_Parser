@@ -4,6 +4,8 @@ import requests
 import streamlit as st
 from groq import Groq
 from dotenv import load_dotenv
+from langchain_aws import ChatBedrock
+import boto3
 
 # Load environment variables from a .env file
 load_dotenv()
@@ -11,6 +13,43 @@ load_dotenv()
 # Fetch API keys from environment variables
 PAGESPEED_API_KEY = os.getenv("PAGESPEED_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# AWS credentials and region
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_KEY")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+def get_bedrock_client():
+    """Create and return a boto3 client for Amazon Bedrock"""
+    try:
+        session = boto3.Session(
+            aws_access_key_id=AWS_ACCESS_KEY,
+            aws_secret_access_key=AWS_SECRET_KEY,
+            region_name=AWS_REGION
+        )
+        
+        return session.client(
+            service_name='bedrock-runtime',
+            region_name=AWS_REGION,
+        )
+    except Exception as e:
+        print(f"Error creating Bedrock client: {str(e)}")
+        return None
+
+def initialize_bedrock_llm():
+    """Initialize and return the Bedrock LLM model"""
+    try:
+        return ChatBedrock(
+            model_id="meta.llama3-8b-instruct-v1:0",
+            client=get_bedrock_client(),
+            model_kwargs={
+                "temperature": 0.7,
+                "max_tokens": 256
+            }
+        )
+    except Exception as e:
+        print(f"Error initializing Bedrock LLM: {str(e)}")
+        return None
 
 PRIORITY_MAPPING = {
     "FCP": "High",
@@ -46,7 +85,14 @@ def fetch_json_from_api(site_url, api_key):
     except json.JSONDecodeError:
         return "Failed to decode JSON. Please check the API response."
 
-client = Groq(api_key=GROQ_API_KEY)
+# client = Groq(api_key=GROQ_API_KEY)
+
+llm = initialize_bedrock_llm()
+
+# Add the provider stop sequence key name map to handle the error
+llm.provider_stop_sequence_key_name_map = {
+    'meta': ''
+}
 
 def generate_questions(query: str, num_questions: int = 1) -> str:
     prompt = f"""
@@ -58,14 +104,16 @@ Ensure the questions:
 4. Are designed to cover different facets of the topic to ensure breadth and depth of coverage.
 """
     try:
-        response = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="mixtral-8x7b-32768",
-            temperature=0.7,
-            max_tokens=256
-        )
-        response_text = response.choices[0].message.content.strip()
-        question = response_text.split("\n")[0]
+        # response = client.chat.completions.create(
+        #     messages=[{"role": "user", "content": prompt}],
+        #     model="mixtral-8x7b-32768",
+        #     temperature=0.7,
+        #     max_tokens=256
+        # )
+        response = llm.invoke(prompt).content
+        print(response)
+        # response_text = response.choices[0].message.content.strip()
+        question = response.split("\n")[0]
         return question
     except Exception as e:
         return f"Error generating question: {e}"
