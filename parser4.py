@@ -94,29 +94,39 @@ llm.provider_stop_sequence_key_name_map = {
     'meta': ''
 }
 
-def generate_questions(query: str, num_questions: int = 1) -> str:
+def generate_questions(query: str, num_questions: int = 1) -> list[dict]:
     prompt = f"""
-Based on the topic "{query}", generate {num_questions} highly refined and semantically rich questions.
-Ensure the questions:
-1. Are detailed and specific to the topic.
-2. Use terminology that reflects developer concerns or priorities related to the topic.
-3. Emphasize actionable insights or solutions that developers can implement.
-4. Are designed to cover different facets of the topic to ensure breadth and depth of coverage.
-"""
+    You are an AI assistant specializing in optimization and issue resolution for web performance metrics. 
+    Given the following issue or optimization metric from a PageSpeed Insights report:  
+    "{query}"
+    Generate a simple, concise question that a developer could use to understand and address the issue. 
+    Avoid using database query syntax, code-like formatting, or complex logical structures. Focus on clarity and relevance.
+    The question should:
+    1. Clearly explain the context of the issue in plain language.
+    2. Be actionable and useful for a developer to resolve the issue effectively.
+    3. Avoid technical jargon or unnecessary complexity.
+    Return the question as plain text.
+    """
+
     try:
-        # response = client.chat.completions.create(
-        #     messages=[{"role": "user", "content": prompt}],
-        #     model="mixtral-8x7b-32768",
-        #     temperature=0.7,
-        #     max_tokens=256
-        # )
-        response = llm.invoke(prompt).content
-        print(response)
-        # response_text = response.choices[0].message.content.strip()
-        question = response.split("\n")[0]
-        return question
+        # Simulated LLM call for generating the response
+        response = llm.invoke(prompt).content  # Replace with your actual LLM call
+        questions = []
+
+        # print(response)
+
+        # Parse the response for questions
+        for line in response.splitlines():
+            if line.strip():  # Skip empty lines
+                questions.append({line.strip()})
+
+        # Limit results to `num_questions`
+        que=questions[1]
+        return que
+
     except Exception as e:
-        return f"Error generating question: {e}"
+        return [{"error": f"Error generating questions: {e}"}]
+
 
 def parse_lighthouse_json(site_url, api_key):
     data = fetch_json_from_api(site_url, api_key)
@@ -139,32 +149,46 @@ def parse_lighthouse_json(site_url, api_key):
         if audit_id in ADDRESSABLE_ISSUES:
             total_time_saved_admin += savings
             solutions = '\n'.join(f"- {line}" for line in ADDRESSABLE_ISSUES[audit_id])
-            results.append(
+            result=(
                 f"{audit_data.get('title')} ({priority} priority)\n"
                 f"Potential Savings: {savings:.2f} ms\nSolution:\n{solutions}\n"
             )
+            st.text_area("Audit Results", value=result, height=200)
+
+    for audit_id, audit_data in audits.items():
+        metric_savings = audit_data.get("metricSavings", {})
+        if not any(metric_savings.values()):
+            continue
+
+        savings = sum(metric_savings.values())
+        priority = PRIORITY_MAPPING.get(audit_id, "Unknown")
+
+        if audit_id in ADDRESSABLE_ISSUES:
+            continue
         else:
             total_time_saved_manual += savings
             unknown_question = generate_questions(audit_data.get("title"))
-            results.append(
+            result=(
                 f"{audit_data.get('title')} ({priority} priority)\n"
                 f"Potential Savings: {savings:.2f} ms\nGenerated Question:\n- {unknown_question}\n"
             )
+            st.text_area("Audit Results", value=result, height=200)
 
     combined_savings = (
         f"Total Admin Panel Savings: {total_time_saved_admin / 1000:.2f} seconds\n"
         f"Total Manual Intervention Savings: {total_time_saved_manual / 1000:.2f} seconds\n"
         f"Total Combined Savings: {(total_time_saved_admin + total_time_saved_manual) / 1000:.2f} seconds"
     )
-    return "\n\n".join(results) + "\n\n" + combined_savings
+    st.text_area("Audit Results", value=combined_savings, height=200)
 
 # Streamlit App
-st.title("Lighthouse Audit Tool")
+st.title("Web Analyser")
 site_url = st.text_input("Website URL", placeholder="Enter the URL of the website to audit")
 
 if st.button("Run Audit"):
     if not PAGESPEED_API_KEY:
         st.error("PAGESPEED_API_KEY is not set. Please configure it in your environment.")
     else:
-        results = parse_lighthouse_json(site_url, PAGESPEED_API_KEY)
-        st.text_area("Audit Results", results, height=300)
+        # with st.spinner("Analyzing website... this might take up to 50 seconds."):
+            parse_lighthouse_json(site_url, PAGESPEED_API_KEY)
+        
